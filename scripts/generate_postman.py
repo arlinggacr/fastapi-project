@@ -12,6 +12,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -665,17 +666,52 @@ def build_environment() -> dict:
             {"key": "wsUrl", "value": WS_URL, "type": "default", "enabled": True},
             {"key": "adminEmail", "value": "admin@example.com", "type": "default", "enabled": True},
             {"key": "adminPassword", "value": PASSWORD, "type": "secret", "enabled": True},
-            {"key": "accessToken", "value": "", "type": "secret", "enabled": True},
-            {"key": "sellerToken", "value": "", "type": "secret", "enabled": True},
-            {"key": "adminToken", "value": "", "type": "secret", "enabled": True},
         ],
         "_postman_variable_scope": "environment",
     }
 
 
+_CAPTURE_RE = re.compile(r"pm\.collectionVariables\.set\(\s*['\"]([A-Za-z0-9_]+)['\"]")
+
+
+def captured_variables(collection: dict) -> set[str]:
+    """Names the collection writes into ``collectionVariables`` at runtime."""
+    found: set[str] = set()
+
+    def walk(items: list[dict]) -> None:
+        for item in items:
+            for event in item.get("event", []):
+                script = event.get("script", {}).get("exec", [])
+                text = "\n".join(script) if isinstance(script, list) else str(script)
+                found.update(_CAPTURE_RE.findall(text))
+            walk(item.get("item", []))
+
+    walk(collection.get("item", []))
+    return found
+
+
+def assert_environment_scope(collection: dict) -> None:
+    """Fail if the environment shadows a variable the collection captures.
+
+    Postman resolves ``{{name}}`` from the environment *before* the
+    collection, so an empty ``accessToken`` in the environment wins over the
+    token a login script stored in ``collectionVariables``. Every
+    authenticated request would then send an empty bearer token. Runtime
+    captures must therefore live in the collection only.
+    """
+    env_keys = {value["key"] for value in build_environment()["values"]}
+    shadowed = env_keys & captured_variables(collection)
+    if shadowed:
+        raise SystemExit(
+            "environment defines runtime-captured variables, which shadow the "
+            f"collection values: {sorted(shadowed)}"
+        )
+
+
 def main() -> None:
     OUT_DIR.mkdir(exist_ok=True)
     collection = build_collection()
+    assert_environment_scope(collection)
     COLLECTION.write_text(json.dumps(collection, indent=2) + "\n")
     ENVIRONMENT.write_text(json.dumps(build_environment(), indent=2) + "\n")
 

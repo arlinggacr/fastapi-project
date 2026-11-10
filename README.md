@@ -211,11 +211,19 @@ uv run python scripts/create_admin.py --email admin@example.com \
   --username admin --password 'Passw0rd!123'
 ```
 
-The same run works headless with Newman:
+The same run works headless with Newman, with or without the environment file:
 
 ```bash
 npx --yes newman@6 run postman/Auction-API.postman_collection.json
+npx --yes newman@6 run postman/Auction-API.postman_collection.json \
+  -e postman/Auction-API.postman_environment.json
 ```
+
+The environment holds configuration only (`baseUrl`, `wsUrl`, admin
+credentials). Tokens and IDs are captured at runtime into collection
+variables, and must never be duplicated in the environment: Postman resolves
+environment values first, so an empty `accessToken` there would shadow the
+token a login script stored. `scripts/generate_postman.py` enforces this.
 
 WebSocket requests cannot be encoded in a Postman collection, so they live in
 `postman/WEBSOCKETS.md`.
