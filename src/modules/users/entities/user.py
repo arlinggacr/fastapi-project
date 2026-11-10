@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, String, Uuid, func
 from sqlalchemy import Enum as SAEnum
@@ -7,6 +8,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.common.constants.enums import UserRole
 from src.database.base import Base
+
+if TYPE_CHECKING:
+    from src.modules.auctions.entities.auction import Auction
+    from src.modules.auctions.entities.bid import Bid
 
 
 class User(Base):
@@ -27,10 +32,10 @@ class User(Base):
     )
 
     # Registered centrally in src.database.models, so short names resolve.
-    auctions: Mapped[list["Auction"]] = relationship(  # noqa: F821
+    auctions: Mapped[list["Auction"]] = relationship(
         back_populates="seller", foreign_keys="Auction.seller_id"
     )
-    bids: Mapped[list["Bid"]] = relationship(  # noqa: F821
+    bids: Mapped[list["Bid"]] = relationship(
         back_populates="bidder", foreign_keys="Bid.bidder_id"
     )
 

@@ -1,25 +1,18 @@
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
-from sqlalchemy import (
-    DateTime,
-    ForeignKey,
-    Index,
-    Integer,
-    Numeric,
-    String,
-    Text,
-    Uuid,
-    func,
-)
-from sqlalchemy import (
-    Enum as SAEnum,
-)
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, Numeric, String, Text, Uuid, func
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.common.constants.enums import AuctionStatus
 from src.database.base import Base
+
+if TYPE_CHECKING:
+    from src.modules.auctions.entities.bid import Bid
+    from src.modules.users.entities.user import User
 
 
 class Auction(Base):
@@ -61,10 +54,10 @@ class Auction(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
-    seller: Mapped["User"] = relationship(  # noqa: F821
+    seller: Mapped["User"] = relationship(
         back_populates="auctions", foreign_keys=[seller_id], lazy="selectin"
     )
-    bids: Mapped[list["Bid"]] = relationship(  # noqa: F821
+    bids: Mapped[list["Bid"]] = relationship(
         back_populates="auction", cascade="all, delete-orphan"
     )
 

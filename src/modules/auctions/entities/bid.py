@@ -1,11 +1,16 @@
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, Index, Numeric, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database.base import Base
+
+if TYPE_CHECKING:
+    from src.modules.auctions.entities.auction import Auction
+    from src.modules.users.entities.user import User
 
 
 class Bid(Base):
@@ -23,8 +28,8 @@ class Bid(Base):
         DateTime(timezone=True), server_default=func.now(), index=True, nullable=False
     )
 
-    auction: Mapped["Auction"] = relationship(back_populates="bids")  # noqa: F821
-    bidder: Mapped["User"] = relationship(  # noqa: F821
+    auction: Mapped["Auction"] = relationship(back_populates="bids")
+    bidder: Mapped["User"] = relationship(
         back_populates="bids", foreign_keys=[bidder_id], lazy="selectin"
     )
 
