@@ -1,0 +1,71 @@
+[project]
+name = "fastapi-project"
+version = "0.1.0"
+description = "Realtime auction API on FastAPI, Neon Postgres and Upstash Redis"
+readme = "README.md"
+authors = [
+    { name = "Arlingga Cahya Ramdhana", email = "arlingga02@gmail.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "alembic>=1.20.0",
+    "authlib>=1.9.1",
+    "bleach>=6.4.0",
+    "email-validator>=2.3.0",
+    "fastapi>=0.150.0",
+    "httpx>=0.28.1",
+    "psycopg[binary]>=3.3.6",
+    "pwdlib[argon2]>=0.3.1",
+    "pydantic-settings>=2.16.0",
+    "pyjwt>=2.15.1",
+    "python-multipart>=0.0.32",
+    "redis>=8.1.0",
+    "sqlalchemy[asyncio]>=2.1.5",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[project.scripts]
+fastapi-project = "main"
+
+[build-system]
+build-backend = "uv_build"
+requires = ["uv_build>=0.12.15,<0.13.0"]
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.17.1",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "C4", "PT", "RUF"]
+ignore = [
+    # FastAPI declares dependencies as default arguments on purpose.
+    "B008",
+    # Broad excepts are deliberate at the network / websocket boundary.
+    "BLE001",
+    "S110",
+    # `except Exception: pass` in cleanup paths is intentional.
+    "SIM105",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/*" = ["E501", "PT", "SIM117"]
+"tests/*" = ["E501", "PT"]
+"alembic/*" = ["E501", "I001", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
+markers = [
+    "integration: hits the real Neon/Upstash services",
+]

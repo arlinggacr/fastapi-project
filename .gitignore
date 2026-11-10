@@ -1,0 +1,24 @@
+# --- python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# --- virtualenvs ---
+.venv/
+venv/
+
+# --- secrets ---
+.env
+.env.*
+!.env.example
+
+# --- tooling / editor ---
+.qodo/
+.DS_Store
+.idea/
+.vscode/
