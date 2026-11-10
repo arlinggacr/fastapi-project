@@ -1,0 +1,1686 @@
+{
+  "info": {
+    "_postman_id": "b7f1c2d3-4e5f-4a6b-8c9d-0e1f2a3b4c5d",
+    "name": "Auction API",
+    "description": "Realtime auction API - every endpoint.\n\n**Run order (Collection Runner works as-is)**\n1. `1. Auth` - registers a fresh seller and bidder, then logs both in.\n2. `3. Auctions` - the seller creates an auction (`auctionId` captured).\n3. `4. Bids` - the bidder bids (the seller cannot bid on their own lot).\n4. `5. Notifications`, `6. Admin`.\n5. `8. Cleanup` - terminal operations (force end, cancel, delete).\n\n**Captured variables**: `sellerToken`, `accessToken`, `refreshToken`, `sellerId`, `userId`, `auctionId`, `bidId`, `notificationId`, `targetUserId`, `adminToken`.\n\n**Admin folder** needs a real admin:\n`uv run python scripts/create_admin.py --email admin@example.com --username admin --password 'S3curePassw0rd!'`\nthen set the `adminEmail` / `adminPassword` collection variables.\n\nEmails are randomised per run, so the collection is repeatable.\n\n**WebSocket endpoints** (not runnable in Postman/Newman collections)\n\n- `GET {{wsUrl}}/ws/auctions/{auctionId}?token=<optional>` - live auction feed. Sends `snapshot` on connect, then `bid_placed`, `auction_started`, `auction_ended`, `ping`.\n- `GET {{wsUrl}}/ws/me?token=<required>` - personal feed: `outbid`, `auction_started`, `auction_ended`.\n\nIn Postman use **New -> WebSocket Request** and paste the URL. See `postman/WEBSOCKETS.md` for a ready-to-paste example.\n",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "0. Meta",
+      "item": [
+        {
+          "name": "Service info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
+            },
+            "description": "GET /"
+          },
+          "response": []
+        },
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "GET /health"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "1. Auth",
+      "item": [
+        {
+          "name": "Register seller",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "description": "POST /auth/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{sellerEmail}}\",\n  \"username\": \"{{sellerUsername}}\",\n  \"password\": \"Passw0rd!123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Fresh account per run so the collection is repeatable.",
+                  "const suffix = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);",
+                  "pm.collectionVariables.set('sellerEmail', `seller_${suffix}@example.com`);",
+                  "pm.collectionVariables.set('sellerUsername', `seller_${suffix}`);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('sellerId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register bidder",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "description": "POST /auth/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{bidderEmail}}\",\n  \"username\": \"{{bidderUsername}}\",\n  \"password\": \"Passw0rd!123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Fresh account per run so the collection is repeatable.",
+                  "const suffix = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);",
+                  "pm.collectionVariables.set('bidderEmail', `bidder_${suffix}@example.com`);",
+                  "pm.collectionVariables.set('bidderUsername', `bidder_${suffix}`);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('userId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login seller (saves sellerToken)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "POST /auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{sellerEmail}}\",\n  \"password\": \"Passw0rd!123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('sellerToken', body.access_token);",
+                  "pm.collectionVariables.set('refreshToken', body.refresh_token);",
+                  "pm.test('tokens issued', () => pm.expect(body.access_token).to.be.a('string'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login bidder (saves accessToken)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "POST /auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{bidderEmail}}\",\n  \"password\": \"Passw0rd!123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('accessToken', body.access_token);",
+                  "pm.collectionVariables.set('refreshToken', body.refresh_token);",
+                  "pm.test('tokens issued', () => pm.expect(body.access_token).to.be.a('string'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register bidder 2 (for outbid test)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "description": "POST /auth/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{bidder2Email}}\",\n  \"username\": \"{{bidder2Username}}\",\n  \"password\": \"Passw0rd!123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Fresh account per run so the collection is repeatable.",
+                  "const suffix = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);",
+                  "pm.collectionVariables.set('bidder2Email', `bidder2_${suffix}@example.com`);",
+                  "pm.collectionVariables.set('bidder2Username', `bidder2_${suffix}`);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('created', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login bidder 2 (saves bidder2Token)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "POST /auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{bidder2Email}}\",\n  \"password\": \"Passw0rd!123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ok', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('bidder2Token', pm.response.json().access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login admin (needs scripts/create_admin.py)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "description": "POST /auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  pm.collectionVariables.set('adminToken', pm.response.json().access_token);",
+                  "} else {",
+                  "  console.warn('Admin login failed - run scripts/create_admin.py first.');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh tokens",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "POST /auth/refresh",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('accessToken', body.access_token);",
+                  "pm.collectionVariables.set('refreshToken', body.refresh_token);",
+                  "pm.test('tokens issued', () => pm.expect(body.access_token).to.be.a('string'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Change bidder password (optional)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me/password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "me",
+                "password"
+              ]
+            },
+            "description": "Optional. Changes the bidder password, so rerun 'Register bidder' afterwards.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"current_password\": \"Passw0rd!123\",\n  \"new_password\": \"N3wPassw0rd!456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2. Users",
+      "item": [
+        {
+          "name": "My profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "me"
+              ]
+            },
+            "description": "GET /users/me",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Public profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/:user_id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                ":user_id"
+              ],
+              "variable": [
+                {
+                  "key": "user_id",
+                  "value": "{{sellerId}}"
+                }
+              ]
+            },
+            "description": "GET /users/{user_id}"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "3. Auctions",
+      "item": [
+        {
+          "name": "Create auction (saves auctionId)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auctions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auctions"
+              ]
+            },
+            "description": "POST /auctions",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{sellerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Vintage mechanical watch\",\n  \"description\": \"Serviced 1968 chronograph, original box.\",\n  \"category\": \"watches\",\n  \"image_url\": \"https://example.com/watch.jpg\",\n  \"starting_price\": \"100.00\",\n  \"min_increment\": \"10.00\",\n  \"start_time\": \"{{startTime}}\",\n  \"end_time\": \"{{endTime}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// end_time must be in the future, so recompute the window each run.",
+                  "const now = Date.now();",
+                  "pm.collectionVariables.set('startTime', new Date(now - 1000).toISOString());",
+                  "pm.collectionVariables.set('endTime', new Date(now + 60 * 60 * 1000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('auctionId', body.id);",
+                  "pm.collectionVariables.set('sellerId', body.seller.id);",
+                  "pm.test('created', () => pm.response.to.have.status(201));",
+                  "pm.test('starts active', () => pm.expect(body.status).to.be.oneOf(['active', 'scheduled']));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List auctions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auctions?seller_id={{sellerId}}&page=1&page_size=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auctions"
+              ],
+              "query": [
+                {
+                  "key": "seller_id",
+                  "value": "{{sellerId}}",
+                  "description": "",
+                  "disabled": false
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "",
+                  "disabled": false
+                },
+                {
+                  "key": "page_size",
+                  "value": "20",
+                  "description": "",
+                  "disabled": false
+                },
+                {
+                  "key": "status",
+                  "value": "",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "category",
+                  "value": "",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "q",
+                  "value": "",
+                  "description": "",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "GET /auctions"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('page shape', () => {",
+                  "  pm.expect(body).to.have.property('items');",
+                  "  pm.expect(body).to.have.property('total');",
+                  "});",
+                  "// Do not clobber auctionId - it is captured by 'Create auction'.",
+                  "pm.test('created auction is listed for its seller', () => {",
+                  "  const id = pm.collectionVariables.get('auctionId');",
+                  "  pm.expect(body.items.map((a) => a.id)).to.include(id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get auction",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auctions/:auction_id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auctions",
+                ":auction_id"
+              ],
+              "variable": [
+                {
+                  "key": "auction_id",
+                  "value": "{{auctionId}}"
+                }
+              ]
+            },
+            "description": "GET /auctions/{auction_id}"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('has min_next_bid', () => pm.expect(pm.response.json()).to.have.property('min_next_bid'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update auction (seller)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auctions/:auction_id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auctions",
+                ":auction_id"
+              ],
+              "variable": [
+                {
+                  "key": "auction_id",
+                  "value": "{{auctionId}}"
+                }
+              ]
+            },
+            "description": "Only allowed while the auction is still `scheduled`. The created auction starts immediately, so a 409 here is expected.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{sellerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Vintage mechanical watch (updated)\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('editable only while scheduled', () => pm.expect(pm.response.code).to.be.oneOf([200, 409]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Watch auction (bidder)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auctions/:auction_id/watch",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auctions",
+                ":auction_id",
+                "watch"
+              ],
+              "variable": [
+                {
+                  "key": "auction_id",
+                  "value": "{{auctionId}}"
+                }
+              ]
+            },
+            "description": "POST /auctions/{auction_id}/watch",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('watching', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unwatch auction (bidder)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auctions/:auction_id/watch",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auctions",
+                ":auction_id",
+                "watch"
+              ],
+              "variable": [
+                {
+                  "key": "auction_id",
+                  "value": "{{auctionId}}"
+                }
+              ]
+            },
+            "description": "DELETE /auctions/{auction_id}/watch",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "4. Bids",
+      "item": [
+        {
+          "name": "Place bid (bidder)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auctions/:auction_id/bids",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auctions",
+                ":auction_id",
+                "bids"
+              ],
+              "variable": [
+                {
+                  "key": "auction_id",
+                  "value": "{{auctionId}}"
+                }
+              ]
+            },
+            "description": "The seller cannot bid on their own auction, hence the bidder token.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": \"110.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('bidId', body.bid.id);",
+                  "pm.test('accepted', () => pm.response.to.have.status(201));",
+                  "pm.test('price updated', () => pm.expect(body.current_price).to.eql('110.00'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Outbid with bidder 2 (creates notification)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auctions/:auction_id/bids",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auctions",
+                ":auction_id",
+                "bids"
+              ],
+              "variable": [
+                {
+                  "key": "auction_id",
+                  "value": "{{auctionId}}"
+                }
+              ]
+            },
+            "description": "Bidder 1 gets an `outbid` notification, which makes the Notifications folder meaningful.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{bidder2Token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": \"120.00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('accepted', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bid history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auctions/:auction_id/bids?limit=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auctions",
+                ":auction_id",
+                "bids"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50",
+                  "description": "",
+                  "disabled": false
+                }
+              ],
+              "variable": [
+                {
+                  "key": "auction_id",
+                  "value": "{{auctionId}}"
+                }
+              ]
+            },
+            "description": "GET /auctions/{auction_id}/bids"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('array', () => pm.expect(pm.response.json()).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Notifications",
+      "item": [
+        {
+          "name": "List notifications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notifications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications"
+              ],
+              "query": [
+                {
+                  "key": "unread_only",
+                  "value": "",
+                  "description": "",
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": "50",
+                  "description": "",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "GET /notifications",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.length) pm.collectionVariables.set('notificationId', body[0].id);",
+                  "pm.test('array', () => pm.expect(body).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unread count",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/unread-count",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications",
+                "unread-count"
+              ]
+            },
+            "description": "GET /notifications/unread-count",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('has unread', () => pm.expect(pm.response.json()).to.have.property('unread'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mark notification read",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/:notification_id/read",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications",
+                ":notification_id",
+                "read"
+              ],
+              "variable": [
+                {
+                  "key": "notification_id",
+                  "value": "{{notificationId}}"
+                }
+              ]
+            },
+            "description": "Bidder 1 was outbid by bidder 2, so at least one notification should exist. Returns 404 when there is nothing to mark.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('marked or nothing to mark', () => pm.expect(pm.response.code).to.be.oneOf([204, 404]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6. Admin",
+      "item": [
+        {
+          "name": "List users (admin)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/users?page=1&page_size=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "",
+                  "disabled": false
+                },
+                {
+                  "key": "page_size",
+                  "value": "50",
+                  "description": "",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "GET /admin/users",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "const mine = pm.collectionVariables.get('userId');",
+                  "const other = body.find((u) => u.id !== mine);",
+                  "if (other) pm.collectionVariables.set('targetUserId', other.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Set user role (admin)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/admin/users/:user_id/role",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "users",
+                ":user_id",
+                "role"
+              ],
+              "variable": [
+                {
+                  "key": "user_id",
+                  "value": "{{targetUserId}}"
+                }
+              ]
+            },
+            "description": "PATCH /admin/users/{user_id}/role",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"admin\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Enable / disable user (admin)",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/users/:user_id/active?is_active=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "users",
+                ":user_id",
+                "active"
+              ],
+              "query": [
+                {
+                  "key": "is_active",
+                  "value": "true",
+                  "description": "",
+                  "disabled": false
+                }
+              ],
+              "variable": [
+                {
+                  "key": "user_id",
+                  "value": "{{targetUserId}}"
+                }
+              ]
+            },
+            "description": "PATCH /admin/users/{user_id}/active",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Platform stats (admin)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/stats",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "stats"
+              ]
+            },
+            "description": "GET /admin/stats",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('shape', () => {",
+                  "  const b = pm.response.json();",
+                  "  ['users', 'auctions', 'bids', 'active_auctions'].forEach((k) => pm.expect(b).to.have.property(k));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "8. Cleanup (terminal)",
+      "item": [
+        {
+          "name": "Force end auction (admin)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/admin/auctions/:auction_id/end",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "auctions",
+                ":auction_id",
+                "end"
+              ],
+              "variable": [
+                {
+                  "key": "auction_id",
+                  "value": "{{auctionId}}"
+                }
+              ]
+            },
+            "description": "Terminal: ends the auction immediately and notifies watchers.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ended', () => pm.expect(pm.response.json().status).to.eql('ended'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cancel auction (seller)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auctions/:auction_id/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auctions",
+                ":auction_id",
+                "cancel"
+              ],
+              "variable": [
+                {
+                  "key": "auction_id",
+                  "value": "{{auctionId}}"
+                }
+              ]
+            },
+            "description": "Terminal. Returns 409 once the auction has ended, which is why the test accepts it - run this before 'Force end' if you want a 200.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{sellerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('cancel or already ended', () => pm.expect(pm.response.code).to.be.oneOf([200, 409]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete auction (seller)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auctions/:auction_id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auctions",
+                ":auction_id"
+              ],
+              "variable": [
+                {
+                  "key": "auction_id",
+                  "value": "{{auctionId}}"
+                }
+              ]
+            },
+            "description": "Only allowed when the auction is not active.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{sellerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('deleted', () => pm.expect(pm.response.code).to.be.oneOf([204, 409]));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000",
+      "type": "string"
+    },
+    {
+      "key": "wsUrl",
+      "value": "ws://127.0.0.1:8000",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refreshToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "sellerToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "bidder2Token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "adminToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "sellerId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "targetUserId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "auctionId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "bidId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "notificationId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "sellerEmail",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "sellerUsername",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "bidderEmail",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "bidderUsername",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "bidder2Email",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "bidder2Username",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "adminEmail",
+      "value": "admin@example.com",
+      "type": "string"
+    },
+    {
+      "key": "adminPassword",
+      "value": "Passw0rd!123",
+      "type": "string"
+    },
+    {
+      "key": "startTime",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "endTime",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
