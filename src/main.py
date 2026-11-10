@@ -13,12 +13,19 @@ from src.database.session import engine
 from src.middlewares.security import BodySizeLimitMiddleware, SecurityHeadersMiddleware
 from src.modules.auctions.services.scheduler import AuctionScheduler
 
+settings = get_settings()
+
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG if settings.debug else logging.INFO,
     format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
 )
+
+# In REST mode every Redis operation is one HTTPS POST, so httpx would log a
+# line per call and drown the application logs. Keep its warnings and errors.
+for _noisy in ("httpx", "httpcore"):
+    logging.getLogger(_noisy).setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
-settings = get_settings()
 
 
 @asynccontextmanager

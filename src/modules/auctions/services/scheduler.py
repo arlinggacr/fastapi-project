@@ -45,26 +45,38 @@ class AuctionScheduler:
                 pass
             self._task = None
 
-    async def tick(self) -> None:
-        """One pass: activate due auctions, finalize expired ones."""
+    async def tick(self) -> tuple[int, int]:
+        """One pass: activate due auctions, finalize expired ones.
+
+        Returns ``(activated, finalized)``. The caller logs a single summary
+        line, so draining a backlog does not emit one line per auction.
+        """
         now = utcnow()
+        activated = 0
+        finalized = 0
         async with SessionLocal() as session:
             repo = AuctionRepository(session)
             lifecycle = AuctionLifecycleService(session, self._gateway, self._broker)
 
             for auction in await repo.due_to_start(now):
                 try:
-                    await lifecycle.activate(auction)
+                    if await lifecycle.activate(auction):
+                        activated += 1
                 except Exception:
                     logger.exception("failed to activate auction %s", auction.id)
                     await repo.rollback()
 
             for auction in await repo.due_to_end(now):
                 try:
-                    await lifecycle.finalize(auction)
+                    if await lifecycle.finalize(auction):
+                        finalized += 1
                 except Exception:
                     logger.exception("failed to finalize auction %s", auction.id)
                     await repo.rollback()
+
+        if activated or finalized:
+            logger.info("scheduler pass: %d started, %d ended", activated, finalized)
+        return activated, finalized
 
     async def _run(self) -> None:
         logger.info("auction scheduler started")

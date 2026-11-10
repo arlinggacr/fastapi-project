@@ -67,7 +67,7 @@ class AuctionLifecycleService:
             )
         await self._session.commit()
 
-        logger.info("auction %s started, notified %d user(s)", auction.id, len(recipients))
+        logger.debug("auction %s started, notified %d user(s)", auction.id, len(recipients))
         return True
 
     async def finalize(self, auction: Auction) -> bool:
@@ -113,5 +113,5 @@ class AuctionLifecycleService:
             )
         await self._session.commit()
 
-        logger.info("auction %s ended, winner=%s", auction.id, auction.current_winner_id)
+        logger.debug("auction %s ended, winner=%s", auction.id, auction.current_winner_id)
         return True
