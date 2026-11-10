@@ -26,6 +26,19 @@ from src.core.config import Settings
 logger = logging.getLogger(__name__)
 
 
+def _text(value: bytes | str | None) -> str:
+    """Normalise a Redis scalar to ``str``.
+
+    The client is built with ``decode_responses=True``, so values arrive as
+    ``str`` at runtime, but the stubs still type them as ``bytes | str``.
+    Decoding here keeps the gateway's declared return types honest instead of
+    scattering casts, and it still behaves correctly if decoding is off.
+    """
+    if value is None:
+        return ""
+    return value.decode() if isinstance(value, bytes) else value
+
+
 @runtime_checkable
 class Gateway(Protocol):
     supports_pubsub: bool
@@ -70,7 +83,8 @@ class RespGateway:
         return await self._redis.eval(script, len(keys), *keys, *[str(a) for a in args])
 
     async def hgetall(self, key: str) -> dict[str, str]:
-        return await self._redis.hgetall(key)
+        raw = await self._redis.hgetall(key)
+        return {_text(k): _text(v) for k, v in raw.items()}
 
     async def hset(self, key: str, mapping: dict[str, Any]) -> None:
         await self._redis.hset(key, mapping={k: str(v) for k, v in mapping.items()})
@@ -84,19 +98,23 @@ class RespGateway:
         return bool(result)
 
     async def xadd(self, key: str, fields: dict[str, Any], maxlen: int = 1000) -> str:
-        return await self._redis.xadd(
+        row_id = await self._redis.xadd(
             key, {k: str(v) for k, v in fields.items()}, maxlen=maxlen, approximate=True
         )
+        return _text(row_id)
 
     async def xrange(
         self, key: str, start: str = "-", end: str = "+", count: int = 100
     ) -> list[tuple[str, dict[str, str]]]:
         rows = await self._redis.xrange(key, min=start, max=end, count=count)
-        return [(row_id, dict(fields)) for row_id, fields in rows]
+        return [
+            (_text(row_id), {_text(k): _text(v) for k, v in (fields or {}).items()})
+            for row_id, fields in rows or []
+        ]
 
     async def xlast_id(self, key: str) -> str:
         rows = await self._redis.xrevrange(key, count=1)
-        return rows[0][0] if rows else "-"
+        return _text(rows[0][0]) if rows else "-"
 
     async def sadd(self, key: str, *members: str) -> int:
         return await self._redis.sadd(key, *members)
@@ -111,7 +129,7 @@ class RespGateway:
         return await self._redis.scard(key)
 
     async def smembers(self, key: str) -> set[str]:
-        return set(await self._redis.smembers(key))
+        return {_text(m) for m in await self._redis.smembers(key)}
 
     async def expire(self, key: str, seconds: int) -> bool:
         return bool(await self._redis.expire(key, seconds))

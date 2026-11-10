@@ -121,7 +121,7 @@ _ERROR_MESSAGES = {
 class BidError(Exception):
     """A rejected bid. ``code`` is stable and machine readable."""
 
-    def __init__(self, code: str, message: str | None = None, **extra: object) -> None:
+    def __init__(self, code: str, message: str | None = None, **extra: str) -> None:
         super().__init__(message or _ERROR_MESSAGES.get(code, "Bid rejected"))
         self.code = code
         self.message = message or _ERROR_MESSAGES.get(code, "Bid rejected")
@@ -218,7 +218,7 @@ class BiddingService:
 
         if not int(result[0]):
             code = str(result[1])
-            extra: dict[str, object] = {}
+            extra: dict[str, str] = {}
             if code == "BID_TOO_LOW":
                 extra["min_next_bid"] = str(from_cents(int(result[2])))
             raise BidError(code, **extra)
