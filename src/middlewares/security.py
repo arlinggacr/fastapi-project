@@ -16,6 +16,11 @@ from starlette.responses import Response
 from src.utils.responses import ClientError, error
 
 MAX_BODY_BYTES = 1 * 1024 * 1024  # 1 MiB
+# Image uploads legitimately exceed the JSON limit: multipart framing plus the
+# file itself. The per-image cap lives in the service; this bounds the whole
+# request so a batch cannot be unbounded.
+UPLOAD_BODY_BYTES = 32 * 1024 * 1024  # 32 MiB
+UPLOAD_PATH_MARKER = "/images"
 
 SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
@@ -52,8 +57,13 @@ class BodySizeLimitMiddleware(BaseHTTPMiddleware):
     ) -> Response:
         length = request.headers.get("content-length")
         if length is not None:
+            limit = (
+                UPLOAD_BODY_BYTES
+                if UPLOAD_PATH_MARKER in request.url.path
+                else MAX_BODY_BYTES
+            )
             try:
-                if int(length) > MAX_BODY_BYTES:
+                if int(length) > limit:
                     return error(
                         ClientError(
                             "Request body too large",

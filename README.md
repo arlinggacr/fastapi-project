@@ -35,6 +35,7 @@ src/
 │   ├── money.py                Decimal <-> integer cents
 │   ├── realtime.py             Broker: stream + pub/sub fan-out
 │   ├── redis.py                Gateway interface + RESP and REST backends
+│   ├── storage.py              S3/Filebase upload, presign, delete
 │   └── time.py                 UTC helpers
 ├── database/
 │   ├── session.py              async engine, SessionLocal, get_session
@@ -148,6 +149,42 @@ HTTP forbids one on 204.
 | DELETE | `/auctions/{id}/watch` | unsubscribe |
 | POST | `/auctions/{id}/bids` | place a bid |
 | GET | `/auctions/{id}/bids` | history, highest first |
+
+### Auction images
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/auctions/{id}/images` | multipart, seller/admin; one or many files |
+| GET | `/auctions/{id}/images` | ordered by `position` |
+| DELETE | `/auctions/{id}/images/{image_id}` | seller/admin |
+
+Uploads go to the S3-compatible bucket (Filebase) under
+`{S3_PREFIX}/{auction_id}/<uuid>.<ext>`. Each row stores both the object
+`key` and its `url`. The lowest `position` is the auction's cover and is
+mirrored into `auction.image_url`, so single-image clients keep working.
+
+Files are validated by **magic bytes**, not by the declared content type or
+extension, so an executable renamed to `.png` is rejected. Accepted types are
+JPEG, PNG, GIF and WebP, up to `S3_MAX_IMAGE_BYTES` (5 MiB) each and 10 files
+per request.
+
+```bash
+# one image
+curl -X POST "$BASE/auctions/$ID/images" \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "files=@photo.jpg"
+
+# several images in one request
+curl -X POST "$BASE/auctions/$ID/images" \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "files=@one.png" -F "files=@two.png"
+```
+
+**Public access.** Filebase only serves buckets publicly on a paid plan
+(`Public buckets require a paid subscription`). While `S3_PUBLIC_READ=false`,
+every image in a response carries a time-limited `access_url` (presigned,
+`S3_PRESIGN_TTL_SECONDS`) alongside the permanent `url`. Set
+`S3_PUBLIC_READ=true` once the bucket is public and `url` becomes usable
+directly.
 
 ### Notifications
 | Method | Path |

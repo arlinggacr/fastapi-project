@@ -11,6 +11,7 @@ from src.common.constants.enums import AuctionStatus
 from src.database.base import Base
 
 if TYPE_CHECKING:
+    from src.modules.auctions.entities.auction_image import AuctionImage
     from src.modules.auctions.entities.bid import Bid
     from src.modules.users.entities.user import User
 
@@ -59,6 +60,11 @@ class Auction(Base):
     )
     bids: Mapped[list["Bid"]] = relationship(
         back_populates="auction", cascade="all, delete-orphan"
+    )
+    images: Mapped[list["AuctionImage"]] = relationship(
+        back_populates="auction",
+        cascade="all, delete-orphan",
+        order_by="AuctionImage.position",
     )
 
     __table_args__ = (

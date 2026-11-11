@@ -10,9 +10,10 @@ from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.common.responses import forbidden, unauthorized
+from src.common.responses import ApiError, forbidden, unauthorized
 from src.core.realtime import Broker
 from src.core.redis import Gateway
+from src.core.storage import S3Storage
 from src.database.session import get_session
 from src.modules.users.entities.user import User
 from src.modules.users.repositories.user_repository import UserRepository
@@ -33,6 +34,14 @@ def get_broker(request: Request) -> Broker:
     if broker is None:
         raise unauthorized("Realtime backend is unavailable")
     return broker
+
+
+def get_storage(request: Request) -> S3Storage:
+    """Object storage, created once on app startup."""
+    storage = getattr(request.app.state, "storage", None)
+    if storage is None:
+        raise ApiError(503, "STORAGE_UNAVAILABLE", "Object storage is unavailable")
+    return storage
 
 
 async def get_user_from_token(token: str, session: AsyncSession) -> User:
@@ -93,6 +102,7 @@ __all__ = [
     "get_gateway",
     "get_optional_user",
     "get_session",
+    "get_storage",
     "get_user_from_token",
     "require_admin",
 ]

@@ -12,6 +12,7 @@ from src.api.router import api_router, ws_router
 from src.core.config import get_settings
 from src.core.realtime import Broker
 from src.core.redis import create_gateway
+from src.core.storage import S3Storage
 from src.database.session import engine
 from src.middlewares.security import BodySizeLimitMiddleware, SecurityHeadersMiddleware
 from src.modules.auctions.services.scheduler import AuctionScheduler
@@ -53,9 +54,14 @@ async def lifespan(app: FastAPI):
     app.state.gateway = gateway
     app.state.broker = broker
     app.state.scheduler = scheduler
+    app.state.storage = S3Storage(settings)
     scheduler.start()
 
     logger.info("app ready (redis backend: %s)", settings.redis_mode)
+    if not settings.storage_configured:
+        logger.warning(
+            "object storage is not configured - image uploads will return 503"
+        )
     try:
         yield
     finally:

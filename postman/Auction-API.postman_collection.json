@@ -707,6 +707,165 @@
           ]
         },
         {
+          "name": "Upload auction images (seller)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auctions/:auction_id/images",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auctions",
+                ":auction_id",
+                "images"
+              ],
+              "variable": [
+                {
+                  "key": "auction_id",
+                  "value": "{{auctionId}}"
+                }
+              ]
+            },
+            "description": "Multipart upload. Repeating the `files` field uploads several images in one request; a single entry uploads one image. Files are validated by magic bytes, not by extension.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{sellerToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "files",
+                  "type": "file",
+                  "src": "postman/fixtures/sample.png"
+                },
+                {
+                  "key": "files",
+                  "type": "file",
+                  "src": "postman/fixtures/sample.png"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json().data;",
+                  "pm.collectionVariables.set('imageId', body[0].id);",
+                  "pm.test('created', () => pm.response.to.have.status(201));",
+                  "pm.test('stores key and url', () => {",
+                  "  pm.expect(body[0]).to.have.property('key');",
+                  "  pm.expect(body[0]).to.have.property('url');",
+                  "  pm.expect(body[0].url).to.include(body[0].key);",
+                  "});",
+                  "pm.test('multiple files accepted', () => pm.expect(body.length).to.eql(2));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List auction images",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auctions/:auction_id/images",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auctions",
+                ":auction_id",
+                "images"
+              ],
+              "variable": [
+                {
+                  "key": "auction_id",
+                  "value": "{{auctionId}}"
+                }
+              ]
+            },
+            "description": "GET /auctions/{auction_id}/images"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('array', () => pm.expect(pm.response.json().data).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete auction image (seller)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auctions/:auction_id/images/:image_id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auctions",
+                ":auction_id",
+                "images",
+                ":image_id"
+              ],
+              "variable": [
+                {
+                  "key": "auction_id",
+                  "value": "{{auctionId}}"
+                },
+                {
+                  "key": "image_id",
+                  "value": "{{imageId}}"
+                }
+              ]
+            },
+            "description": "DELETE /auctions/{auction_id}/images/{image_id}",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{sellerToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('deleted', () => pm.expect(pm.response.code).to.eql(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Get auction",
           "request": {
             "method": "GET",
@@ -1625,6 +1784,11 @@
     },
     {
       "key": "bidId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "imageId",
       "value": "",
       "type": "string"
     },

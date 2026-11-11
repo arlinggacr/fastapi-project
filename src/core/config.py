@@ -1,4 +1,5 @@
 from functools import lru_cache
+from urllib.parse import urlsplit
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -46,6 +47,53 @@ class Settings(BaseSettings):
     extension_seconds: int = 60
     extension_window_seconds: int = 60
     scheduler_interval: float = 1.0
+
+    # --- object storage (S3-compatible, e.g. Filebase) ---
+    # `s3_url` is the public read base, e.g.
+    # https://cheerful-aquamarine-deer.s3.filebase.io
+    s3_url: str | None = None
+    s3_endpoint_url: str = "https://s3.filebase.io"
+    # Derived from `s3_url` when unset.
+    s3_bucket: str | None = None
+    region: str = "auto"
+    signature_version: str = "v4"
+    s3_access_token: str | None = None
+    s3_secret_key: str | None = None
+    # Folder inside the bucket that every object is written under.
+    s3_prefix: str = "auction"
+    s3_max_image_bytes: int = 5 * 1024 * 1024
+    # Filebase only serves buckets publicly on a paid plan. While this is
+    # False, responses carry a time-limited presigned URL instead.
+    s3_public_read: bool = False
+    s3_presign_ttl_seconds: int = 3600
+
+    @property
+    def s3_public_base(self) -> str:
+        """Public base URL without a trailing slash."""
+        return (self.s3_url or "").rstrip("/")
+
+    @property
+    def s3_resolved_bucket(self) -> str:
+        """Bucket name, taken from `s3_url`'s host when not set explicitly.
+
+        ``https://cheerful-aquamarine-deer.s3.filebase.io`` -> ``cheerful-aquamarine-deer``
+        """
+        if self.s3_bucket:
+            return self.s3_bucket
+        if not self.s3_url:
+            return ""
+        host = urlsplit(self.s3_url).netloc
+        return host.split(".")[0] if host else ""
+
+    @property
+    def storage_configured(self) -> bool:
+        """True when every value needed to write an object is present."""
+        return bool(
+            self.s3_public_base
+            and self.s3_resolved_bucket
+            and self.s3_access_token
+            and self.s3_secret_key
+        )
 
     @property
     def sqlalchemy_url(self) -> str:

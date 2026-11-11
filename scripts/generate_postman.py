@@ -229,6 +229,47 @@ REQUESTS: list[dict[str, Any]] = [
     },
     {
         "folder": "3. Auctions",
+        "name": "Upload auction images (seller)",
+        "method": "post",
+        "path": "/auctions/{auction_id}/images",
+        "auth": SELLER,
+        "formdata": [
+            ("files", "postman/fixtures/sample.png"),
+            ("files", "postman/fixtures/sample.png"),
+        ],
+        "description": (
+            "Multipart upload. Repeating the `files` field uploads several "
+            "images in one request; a single entry uploads one image. Files "
+            "are validated by magic bytes, not by extension."
+        ),
+        "test": "const body = pm.response.json().data;\n"
+        "pm.collectionVariables.set('imageId', body[0].id);\n"
+        "pm.test('created', () => pm.response.to.have.status(201));\n"
+        "pm.test('stores key and url', () => {\n"
+        "  pm.expect(body[0]).to.have.property('key');\n"
+        "  pm.expect(body[0]).to.have.property('url');\n"
+        "  pm.expect(body[0].url).to.include(body[0].key);\n"
+        "});\n"
+        "pm.test('multiple files accepted', () => pm.expect(body.length).to.eql(2));",
+    },
+    {
+        "folder": "3. Auctions",
+        "name": "List auction images",
+        "method": "get",
+        "path": "/auctions/{auction_id}/images",
+        "auth": PUBLIC,
+        "test": "pm.test('array', () => pm.expect(pm.response.json().data).to.be.an('array'));",
+    },
+    {
+        "folder": "3. Auctions",
+        "name": "Delete auction image (seller)",
+        "method": "delete",
+        "path": "/auctions/{auction_id}/images/{image_id}",
+        "auth": SELLER,
+        "test": "pm.test('deleted', () => pm.expect(pm.response.code).to.eql(204));",
+    },
+    {
+        "folder": "3. Auctions",
         "name": "Get auction",
         "method": "get",
         "path": "/auctions/{auction_id}",
@@ -428,6 +469,7 @@ DEFAULT_PATH_VALUES = {
     "auction_id": "{{auctionId}}",
     "user_id": "{{userId}}",
     "notification_id": "{{notificationId}}",
+    "image_id": "{{imageId}}",
 }
 
 # Query params that are noisy or destructive when always sent.
@@ -548,6 +590,16 @@ def build_item(spec: dict, entry: dict) -> dict:
             "raw": json.dumps(body, indent=2),
             "options": {"raw": {"language": "json"}},
         }
+    elif entry.get("formdata"):
+        # Multipart upload: Postman/Newman read the file from disk, so the
+        # paths are relative to the repository root.
+        request["body"] = {
+            "mode": "formdata",
+            "formdata": [
+                {"key": key, "type": "file", "src": src}
+                for key, src in entry["formdata"]
+            ],
+        }
 
     item: dict[str, Any] = {"name": entry["name"], "request": request, "response": []}
 
@@ -643,6 +695,7 @@ def build_collection() -> dict:
             {"key": "targetUserId", "value": "", "type": "string"},
             {"key": "auctionId", "value": "", "type": "string"},
             {"key": "bidId", "value": "", "type": "string"},
+            {"key": "imageId", "value": "", "type": "string"},
             {"key": "notificationId", "value": "", "type": "string"},
             {"key": "sellerEmail", "value": "", "type": "string"},
             {"key": "sellerUsername", "value": "", "type": "string"},

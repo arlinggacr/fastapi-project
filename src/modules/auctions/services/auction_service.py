@@ -12,6 +12,7 @@ from src.common.helpers.pagination import build_page
 from src.common.responses import ApiError, forbidden, not_found
 from src.core.realtime import Broker
 from src.core.redis import Gateway
+from src.core.storage import S3Storage
 from src.core.time import utcnow
 from src.modules.auctions.dtos.auction_dto import (
     AuctionCreateDTO,
@@ -23,6 +24,7 @@ from src.modules.auctions.entities.auction import Auction
 from src.modules.auctions.repositories.auction_repository import AuctionRepository
 from src.modules.auctions.repositories.bid_repository import BidRepository
 from src.modules.auctions.services.bidding_service import BiddingService, next_min_bid
+from src.modules.auctions.services.image_service import AuctionImageService
 from src.modules.auctions.services.lifecycle_service import AuctionLifecycleService
 from src.modules.auctions.services.watcher_service import WatcherService
 from src.modules.users.dtos.user_response import PublicUserResponse
@@ -33,10 +35,17 @@ CLOCK_SKEW_SECONDS = 300
 
 
 class AuctionService:
-    def __init__(self, session: AsyncSession, gateway: Gateway, broker: Broker) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        gateway: Gateway,
+        broker: Broker,
+        storage: S3Storage | None = None,
+    ) -> None:
         self._session = session
         self._gateway = gateway
         self._broker = broker
+        self._storage = storage
         self._auctions = AuctionRepository(session)
         self._bids = BidRepository(session)
         self._bidding = BiddingService(session, gateway)
@@ -159,6 +168,12 @@ class AuctionService:
         self._assert_can_manage(auction, user)
         if auction.status == AuctionStatus.active:
             raise ApiError(409, "IS_ACTIVE", "Cancel the auction before deleting it")
+
+        # The rows cascade away with the auction, but the objects in the bucket
+        # do not, so the image service clears those first.
+        if self._storage is not None:
+            await AuctionImageService(self._session, self._storage).purge_objects(auction.id)
+
         await self._auctions.delete(auction)
         await self._auctions.commit()
 

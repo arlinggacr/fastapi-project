@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.realtime import Broker
 from src.core.redis import Gateway
+from src.core.storage import S3Storage
 from src.database.session import get_session
 from src.modules.auctions.dtos.auction_dto import (
     AuctionCreateDTO,
@@ -27,6 +28,7 @@ from src.utils.deps import (
     get_current_user,
     get_gateway,
     get_optional_user,
+    get_storage,
 )
 from src.utils.responses import PageHandler, SuccessEnvelope, success
 
@@ -106,8 +108,9 @@ async def delete_auction(
     session: AsyncSession = Depends(get_session),
     gateway: Gateway = Depends(get_gateway),
     broker: Broker = Depends(get_broker),
+    storage: S3Storage = Depends(get_storage),
 ) -> None:
-    await _service(session, gateway, broker).delete(auction_id, user)
+    await AuctionService(session, gateway, broker, storage).delete(auction_id, user)
 
 
 @router.post("/{auction_id}/cancel", response_model=SuccessEnvelope[AuctionResponse])
