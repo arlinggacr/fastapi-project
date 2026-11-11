@@ -1,4 +1,9 @@
-"""Response envelopes and error helpers shared by controllers."""
+"""Errors that controllers and services raise.
+
+These are *raise* helpers, not response builders: raise one and the registered
+handlers in ``src.main`` convert it into the error envelope defined in
+``src.utils.responses``.
+"""
 
 from __future__ import annotations
 

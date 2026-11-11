@@ -59,7 +59,7 @@ CREATE_AUCTION_SCRIPT = "\n".join(
 
 SAVE_TOKENS = "\n".join(
     [
-        "const body = pm.response.json();",
+        "const body = pm.response.json().data;",
         "pm.collectionVariables.set('%s', body.access_token);",
         "pm.collectionVariables.set('refreshToken', body.refresh_token);",
         "pm.test('tokens issued', () => pm.expect(body.access_token).to.be.a('string'));",
@@ -82,7 +82,7 @@ REQUESTS: list[dict[str, Any]] = [
         "body": {"email": "{{sellerEmail}}", "username": "{{sellerUsername}}", "password": PASSWORD},
         "prerequest": unique_account("seller", "sellerEmail", "sellerUsername"),
         "test": "pm.test('created', () => pm.response.to.have.status(201));\n"
-        "pm.collectionVariables.set('sellerId', pm.response.json().id);",
+        "pm.collectionVariables.set('sellerId', pm.response.json().data.id);",
     },
     {
         "folder": "1. Auth",
@@ -93,7 +93,7 @@ REQUESTS: list[dict[str, Any]] = [
         "body": {"email": "{{bidderEmail}}", "username": "{{bidderUsername}}", "password": PASSWORD},
         "prerequest": unique_account("bidder", "bidderEmail", "bidderUsername"),
         "test": "pm.test('created', () => pm.response.to.have.status(201));\n"
-        "pm.collectionVariables.set('userId', pm.response.json().id);",
+        "pm.collectionVariables.set('userId', pm.response.json().data.id);",
     },
     {
         "folder": "1. Auth",
@@ -135,7 +135,7 @@ REQUESTS: list[dict[str, Any]] = [
         "auth": PUBLIC,
         "body": {"email": "{{bidder2Email}}", "password": PASSWORD},
         "test": "pm.test('ok', () => pm.response.to.have.status(200));\n"
-        "pm.collectionVariables.set('bidder2Token', pm.response.json().access_token);",
+        "pm.collectionVariables.set('bidder2Token', pm.response.json().data.access_token);",
     },
     {
         "folder": "1. Auth",
@@ -145,7 +145,7 @@ REQUESTS: list[dict[str, Any]] = [
         "auth": PUBLIC,
         "body": {"email": "{{adminEmail}}", "password": "{{adminPassword}}"},
         "test": "if (pm.response.code === 200) {\n"
-        "  pm.collectionVariables.set('adminToken', pm.response.json().access_token);\n"
+        "  pm.collectionVariables.set('adminToken', pm.response.json().data.access_token);\n"
         "} else {\n"
         "  console.warn('Admin login failed - run scripts/create_admin.py first.');\n"
         "}",
@@ -198,7 +198,7 @@ REQUESTS: list[dict[str, Any]] = [
             "end_time": "{{endTime}}",
         },
         "prerequest": CREATE_AUCTION_SCRIPT,
-        "test": "const body = pm.response.json();\n"
+        "test": "const body = pm.response.json().data;\n"
         "pm.collectionVariables.set('auctionId', body.id);\n"
         "pm.collectionVariables.set('sellerId', body.seller.id);\n"
         "pm.test('created', () => pm.response.to.have.status(201));\n"
@@ -217,13 +217,14 @@ REQUESTS: list[dict[str, Any]] = [
         },
         "test": "const body = pm.response.json();\n"
         "pm.test('page shape', () => {\n"
-        "  pm.expect(body).to.have.property('items');\n"
-        "  pm.expect(body).to.have.property('total');\n"
+        "  pm.expect(body).to.have.property('data');\n"
+        "  pm.expect(body).to.have.property('pagination');\n"
+        "  pm.expect(body.pagination).to.have.property('totalData');\n"
         "});\n"
         "// Do not clobber auctionId - it is captured by 'Create auction'.\n"
         "pm.test('created auction is listed for its seller', () => {\n"
         "  const id = pm.collectionVariables.get('auctionId');\n"
-        "  pm.expect(body.items.map((a) => a.id)).to.include(id);\n"
+        "  pm.expect(body.data.map((a) => a.id)).to.include(id);\n"
         "});",
     },
     {
@@ -232,7 +233,7 @@ REQUESTS: list[dict[str, Any]] = [
         "method": "get",
         "path": "/auctions/{auction_id}",
         "auth": PUBLIC,
-        "test": "pm.test('has min_next_bid', () => pm.expect(pm.response.json()).to.have.property('min_next_bid'));",
+        "test": "pm.test('has min_next_bid', () => pm.expect(pm.response.json().data).to.have.property('min_next_bid'));",
     },
     {
         "folder": "3. Auctions",
@@ -271,7 +272,7 @@ REQUESTS: list[dict[str, Any]] = [
         "path": "/auctions/{auction_id}/bids",
         "auth": BIDDER,
         "body": {"amount": "110.00"},
-        "test": "const body = pm.response.json();\n"
+        "test": "const body = pm.response.json().data;\n"
         "pm.collectionVariables.set('bidId', body.bid.id);\n"
         "pm.test('accepted', () => pm.response.to.have.status(201));\n"
         "pm.test('price updated', () => pm.expect(body.current_price).to.eql('110.00'));",
@@ -297,7 +298,7 @@ REQUESTS: list[dict[str, Any]] = [
         "path": "/auctions/{auction_id}/bids",
         "auth": PUBLIC,
         "query": {"limit": "50"},
-        "test": "pm.test('array', () => pm.expect(pm.response.json()).to.be.an('array'));",
+        "test": "pm.test('array', () => pm.expect(pm.response.json().data).to.be.an('array'));",
     },
 
     # ---------------- 5. Notifications ----------------
@@ -308,7 +309,7 @@ REQUESTS: list[dict[str, Any]] = [
         "path": "/notifications",
         "auth": BIDDER,
         "query": {"limit": "50"},
-        "test": "const body = pm.response.json();\n"
+        "test": "const body = pm.response.json().data;\n"
         "if (body.length) pm.collectionVariables.set('notificationId', body[0].id);\n"
         "pm.test('array', () => pm.expect(body).to.be.an('array'));",
     },
@@ -318,7 +319,7 @@ REQUESTS: list[dict[str, Any]] = [
         "method": "get",
         "path": "/notifications/unread-count",
         "auth": BIDDER,
-        "test": "pm.test('has unread', () => pm.expect(pm.response.json()).to.have.property('unread'));",
+        "test": "pm.test('has unread', () => pm.expect(pm.response.json().data).to.have.property('unread'));",
     },
     {
         "folder": "5. Notifications",
@@ -342,7 +343,7 @@ REQUESTS: list[dict[str, Any]] = [
         "path": "/admin/users",
         "auth": ADMIN,
         "query": {"page": "1", "page_size": "50"},
-        "test": "const body = pm.response.json();\n"
+        "test": "const body = pm.response.json().data;\n"
         "const mine = pm.collectionVariables.get('userId');\n"
         "const other = body.find((u) => u.id !== mine);\n"
         "if (other) pm.collectionVariables.set('targetUserId', other.id);",
@@ -372,7 +373,7 @@ REQUESTS: list[dict[str, Any]] = [
         "path": "/admin/stats",
         "auth": ADMIN,
         "test": "pm.test('shape', () => {\n"
-        "  const b = pm.response.json();\n"
+        "  const b = pm.response.json().data;\n"
         "  ['users', 'auctions', 'bids', 'active_auctions'].forEach((k) => pm.expect(b).to.have.property(k));\n"
         "});",
     },
@@ -385,7 +386,7 @@ REQUESTS: list[dict[str, Any]] = [
         "path": "/admin/auctions/{auction_id}/end",
         "auth": ADMIN,
         "description": "Terminal: ends the auction immediately and notifies watchers.",
-        "test": "pm.test('ended', () => pm.expect(pm.response.json().status).to.eql('ended'));",
+        "test": "pm.test('ended', () => pm.expect(pm.response.json().data.status).to.eql('ended'));",
     },
     {
         "folder": "8. Cleanup (terminal)",

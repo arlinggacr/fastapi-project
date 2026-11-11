@@ -57,7 +57,7 @@ async def main() -> None:
                     "/auth/login", json={"email": u["email"], "password": u["password"]}
                 )
                 ok(f"login {u['username']}", r.status_code == 200, r.text[:120])
-                tokens[u["username"]] = r.json()["access_token"]
+                tokens[u["username"]] = r.json()["data"]["access_token"]
 
             sh = {"Authorization": f"Bearer {tokens[seller['username']]}"}
             bh = {"Authorization": f"Bearer {tokens[bidder['username']]}"}
@@ -75,7 +75,7 @@ async def main() -> None:
             }
             r = await client.post("/auctions", json=payload, headers=sh)
             ok("create auction", r.status_code == 201, r.text[:200])
-            auction = r.json()
+            auction = r.json()["data"]
             aid = auction["id"]
             ok("auction is active", auction["status"] == "active", auction["status"])
             ok("category normalised", auction["category"] == "test", auction["category"])
@@ -88,7 +88,7 @@ async def main() -> None:
 
             r = await client.post(f"/auctions/{aid}/bids", json={"amount": "110.00"}, headers=bh)
             ok("valid bid accepted", r.status_code == 201, r.text[:200])
-            first = r.json()
+            first = r.json()["data"]
             ok("price updated", first["current_price"] == "110.00", first["current_price"])
             ok("min next bid", first["min_next_bid"] == "120.00", first["min_next_bid"])
 
@@ -113,13 +113,13 @@ async def main() -> None:
             )
 
             r = await client.get(f"/auctions/{aid}/bids")
-            ok("bid history", r.status_code == 200 and len(r.json()) >= 3, len(r.json()))
+            ok("bid history", r.status_code == 200 and len(r.json()["data"]) >= 3, len(r.json()["data"]))
 
             r = await client.get("/notifications", headers=oh)
             ok(
                 "outbid notification delivered",
-                r.status_code == 200 and any(n["type"] == "outbid" for n in r.json()),
-                [n["type"] for n in r.json()],
+                r.status_code == 200 and any(n["type"] == "outbid" for n in r.json()["data"]),
+                [n["type"] for n in r.json()["data"]],
             )
 
             # Watch + force end through the scheduler path.
@@ -127,10 +127,10 @@ async def main() -> None:
             ok("watch auction", r.status_code == 204, r.text[:120])
 
             r = await client.get(f"/auctions/{aid}")
-            ok("watchers counted", r.json()["watchers"] == 1, r.json()["watchers"])
+            ok("watchers counted", r.json()["data"]["watchers"] == 1, r.json()["data"]["watchers"])
 
             r = await client.get("/health")
-            ok("health", r.status_code == 200 and r.json()["redis"] is True, r.json())
+            ok("health", r.status_code == 200 and r.json()["data"]["redis"] is True, r.json())
 
     print("\nAll smoke checks passed.")
 

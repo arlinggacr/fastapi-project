@@ -42,10 +42,10 @@ def make_user(client: TestClient):
         assert response.status_code == 201, response.text
         tokens = client.post(
             "/auth/login", json={"email": body["email"], "password": body["password"]}
-        ).json()
+        ).json()["data"]
         user = {
             **body,
-            "id": response.json()["id"],
+            "id": response.json()["data"]["id"],
             "token": tokens["access_token"],
             "refresh": tokens["refresh_token"],
             "headers": {"Authorization": f"Bearer {tokens['access_token']}"},
@@ -75,7 +75,7 @@ def auction(client: TestClient, make_user):
         payload.update(overrides)
         response = client.post("/auctions", json=payload, headers=seller["headers"])
         assert response.status_code == 201, response.text
-        return response.json()
+        return response.json()["data"]
 
     _create.seller = seller
     return _create

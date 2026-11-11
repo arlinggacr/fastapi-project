@@ -36,7 +36,7 @@ def admin(client, make_user):
 def test_admin_can_list_users(client, admin):
     response = client.get("/admin/users", headers=admin["headers"])
     assert response.status_code == 200
-    assert isinstance(response.json(), list)
+    assert isinstance(response.json()["data"], list)
 
 
 def test_normal_user_cannot_reach_admin(client, make_user):
@@ -53,7 +53,7 @@ def test_admin_can_promote_another_user(client, admin, make_user):
         headers=admin["headers"],
     )
     assert response.status_code == 200
-    assert response.json()["role"] == "admin"
+    assert response.json()["data"]["role"] == "admin"
 
 
 def test_admin_cannot_change_own_role(client, admin):
@@ -78,10 +78,10 @@ def test_admin_can_force_end_auction(client, admin, auction):
     created = auction()
     response = client.post(f"/admin/auctions/{created['id']}/end", headers=admin["headers"])
     assert response.status_code == 200
-    assert response.json()["status"] == "ended"
+    assert response.json()["data"]["status"] == "ended"
 
 
 def test_admin_stats_shape(client, admin):
     response = client.get("/admin/stats", headers=admin["headers"])
     assert response.status_code == 200
-    assert {"users", "auctions", "bids", "active_auctions"} <= response.json().keys()
+    assert {"users", "auctions", "bids", "active_auctions"} <= response.json()["data"].keys()

@@ -50,12 +50,12 @@ async def main() -> None:
                 r = await client.post(
                     "/auth/login", json={"email": body["email"], "password": body["password"]}
                 )
-                users[role] = (r.json()["access_token"], r.json()["access_token"])
+                users[role] = (r.json()["data"]["access_token"], r.json()["data"]["access_token"])
 
             me = {}
             for role, (token, _) in users.items():
                 r = await client.get("/users/me", headers={"Authorization": f"Bearer {token}"})
-                me[role] = r.json()["id"]
+                me[role] = r.json()["data"]["id"]
 
             sh = {"Authorization": f"Bearer {users['seller'][0]}"}
             bh = {"Authorization": f"Bearer {users['bidder'][0]}"}
@@ -73,7 +73,7 @@ async def main() -> None:
             }
             r = await client.post("/auctions", json=payload, headers=sh)
             ok("create scheduled auction", r.status_code == 201, r.text[:160])
-            auction = r.json()
+            auction = r.json()["data"]
             aid = auction["id"]
             ok("status is scheduled", auction["status"] == "scheduled", auction["status"])
 
@@ -114,7 +114,7 @@ async def main() -> None:
             await asyncio.gather(*tasks)
 
             r = await client.get(f"/auctions/{aid}")
-            ok("auction now active", r.json()["status"] == "active", r.json()["status"])
+            ok("auction now active", r.json()["data"]["status"] == "active", r.json()["data"]["status"])
             ok(
                 "auction_started broadcast on auction stream",
                 any(e["type"] == "auction_started" for e in auction_events),
@@ -146,14 +146,14 @@ async def main() -> None:
                 await session.commit()
             await scheduler.tick()
             r = await client.get(f"/auctions/{aid}")
-            ok("auction ended", r.json()["status"] == "ended", r.json()["status"])
+            ok("auction ended", r.json()["data"]["status"] == "ended", r.json()["data"]["status"])
             ok(
                 "winner recorded",
-                r.json()["current_winner_id"] == me["bidder"],
-                r.json()["current_winner_id"],
+                r.json()["data"]["current_winner_id"] == me["bidder"],
+                r.json()["data"]["current_winner_id"],
             )
 
-            notifs = (await client.get("/notifications", headers=wh)).json()
+            notifs = (await client.get("/notifications", headers=wh)).json()["data"]
             types = [n["type"] for n in notifs]
             ok(
                 "watcher notified of start and end",

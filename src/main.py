@@ -1,9 +1,12 @@
 import logging
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from src.api.router import api_router, ws_router
 from src.core.config import get_settings
@@ -12,6 +15,14 @@ from src.core.redis import create_gateway
 from src.database.session import engine
 from src.middlewares.security import BodySizeLimitMiddleware, SecurityHeadersMiddleware
 from src.modules.auctions.services.scheduler import AuctionScheduler
+from src.utils.responses import (
+    ClientError,
+    ErrorEnvelope,
+    SuccessEnvelope,
+    error,
+    from_http_exception,
+    success,
+)
 
 settings = get_settings()
 
@@ -59,12 +70,16 @@ app = FastAPI(
     version="0.1.0",
     description=(
         "Realtime auction API. Users list their own items; anyone except the "
-        "seller can bid. Live updates over WebSockets, backed by Redis."
+        "seller can bid. Live updates over WebSockets, backed by Redis.\n\n"
+        "Every response uses one of two envelopes:\n"
+        "- success: `{status: true, data, message, pagination}`\n"
+        "- error: `{status: false, message, error}`"
     ),
     lifespan=lifespan,
     docs_url="/docs" if settings.enable_docs else None,
     redoc_url="/redoc" if settings.enable_docs else None,
     openapi_url="/openapi.json" if settings.enable_docs else None,
+    responses={500: {"model": ErrorEnvelope}, 503: {"model": ErrorEnvelope}},
 )
 
 app.add_middleware(SecurityHeadersMiddleware)
@@ -81,32 +96,61 @@ app.include_router(api_router)
 app.include_router(ws_router)
 
 
+@app.exception_handler(ClientError)
+async def client_error_handler(request: Request, exc: ClientError) -> JSONResponse:
+    """Domain errors carry their own status code and safe details."""
+    return error(exc)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(
+    request: Request, exc: StarletteHTTPException
+) -> JSONResponse:
+    """Covers FastAPI's HTTPException (and therefore ApiError) plus routing 404/405."""
+    return from_http_exception(exc)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    """Request validation failures use the C# validation branch: 400 + message list."""
+    messages = [
+        f"{'.'.join(str(part) for part in err['loc'][1:]) or 'body'}: {err['msg']}"
+        for err in exc.errors()
+    ]
+    return error(messages)
+
+
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """Never leak stack traces or driver messages to clients."""
     logger.exception("unhandled error on %s %s", request.method, request.url.path)
-    return JSONResponse(
-        {"detail": {"code": "INTERNAL_ERROR", "message": "An unexpected error occurred"}},
-        status_code=500,
+    return error(exc)
+
+
+@app.get("/", tags=["meta"], response_model=SuccessEnvelope[dict[str, Any]])
+async def root() -> dict[str, Any]:
+    return success(
+        {
+            "name": settings.app_name,
+            "docs": "/docs" if settings.enable_docs else None,
+            "realtime": settings.redis_mode,
+            "websockets": ["/ws/auctions/{id}?token=", "/ws/me?token="],
+        },
+        "Service info",
     )
 
 
-@app.get("/", tags=["meta"])
-async def root() -> dict:
-    return {
-        "name": settings.app_name,
-        "docs": "/docs" if settings.enable_docs else None,
-        "realtime": settings.redis_mode,
-        "websockets": ["/ws/auctions/{id}?token=", "/ws/me?token="],
-    }
-
-
-@app.get("/health", tags=["meta"])
-async def health() -> dict:
+@app.get("/health", tags=["meta"], response_model=SuccessEnvelope[dict[str, Any]])
+async def health() -> dict[str, Any]:
     gateway = app.state.gateway
     redis_ok = False
     try:
         redis_ok = await gateway.ping()
     except Exception:
         pass
-    return {"status": "ok" if redis_ok else "degraded", "redis": redis_ok}
+    return success(
+        {"status": "ok" if redis_ok else "degraded", "redis": redis_ok},
+        "Service is healthy" if redis_ok else "Service is degraded",
+    )

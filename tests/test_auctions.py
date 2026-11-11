@@ -36,7 +36,7 @@ def test_end_before_start_rejected(client, make_user):
         },
         headers=seller["headers"],
     )
-    assert response.status_code == 422
+    assert response.status_code == 400
 
 
 def test_past_end_time_rejected(client, make_user):
@@ -65,7 +65,7 @@ def test_seller_cannot_bid_on_own_auction(client, auction):
         headers=seller["headers"],
     )
     assert response.status_code == 409
-    assert response.json()["detail"]["code"] == "SELLER_CANNOT_BID"
+    assert response.json()["error"]["code"] == "SELLER_CANNOT_BID"
 
 
 def test_bid_must_meet_starting_price(client, auction, make_user):
@@ -77,8 +77,8 @@ def test_bid_must_meet_starting_price(client, auction, make_user):
         headers=bidder["headers"],
     )
     assert response.status_code == 409
-    assert response.json()["detail"]["code"] == "BID_TOO_LOW"
-    assert response.json()["detail"]["min_next_bid"] == "100.00"
+    assert response.json()["error"]["code"] == "BID_TOO_LOW"
+    assert response.json()["error"]["min_next_bid"] == "100.00"
 
 
 def test_min_increment_enforced(client, auction, make_user):
@@ -101,7 +101,7 @@ def test_min_increment_enforced(client, auction, make_user):
         headers=second["headers"],
     )
     assert response.status_code == 409
-    assert response.json()["detail"]["min_next_bid"] == "110.00"
+    assert response.json()["error"]["min_next_bid"] == "110.00"
 
     accepted = client.post(
         f"/auctions/{created['id']}/bids",
@@ -109,7 +109,7 @@ def test_min_increment_enforced(client, auction, make_user):
         headers=second["headers"],
     )
     assert accepted.status_code == 201
-    assert accepted.json()["current_price"] == "110.00"
+    assert accepted.json()["data"]["current_price"] == "110.00"
 
 
 def test_concurrent_identical_bids_only_one_wins(client, auction, make_user):
@@ -128,7 +128,7 @@ def test_concurrent_identical_bids_only_one_wins(client, auction, make_user):
 
     assert statuses.count(201) == 1, statuses
 
-    bids = client.get(f"/auctions/{created['id']}/bids").json()
+    bids = client.get(f"/auctions/{created['id']}/bids").json()["data"]
     assert len(bids) == 1
 
 
@@ -148,7 +148,7 @@ def test_outbid_notification(client, auction, make_user):
         headers=second["headers"],
     )
 
-    notifications = client.get("/notifications", headers=first["headers"]).json()
+    notifications = client.get("/notifications", headers=first["headers"]).json()["data"]
     assert any(n["type"] == "outbid" for n in notifications)
 
 
@@ -160,13 +160,13 @@ def test_watch_and_unwatch(client, auction, make_user):
         client.post(f"/auctions/{created['id']}/watch", headers=watcher["headers"]).status_code
         == 204
     )
-    assert client.get(f"/auctions/{created['id']}").json()["watchers"] == 1
+    assert client.get(f"/auctions/{created['id']}").json()["data"]["watchers"] == 1
 
     assert (
         client.delete(f"/auctions/{created['id']}/watch", headers=watcher["headers"]).status_code
         == 204
     )
-    assert client.get(f"/auctions/{created['id']}").json()["watchers"] == 0
+    assert client.get(f"/auctions/{created['id']}").json()["data"]["watchers"] == 0
 
 
 def test_only_seller_can_edit(client, auction, make_user):
@@ -184,7 +184,7 @@ def test_cancel_auction(client, auction):
     created = auction()
     response = client.post(f"/auctions/{created['id']}/cancel", headers=auction.seller["headers"])
     assert response.status_code == 200
-    assert response.json()["status"] == "cancelled"
+    assert response.json()["data"]["status"] == "cancelled"
 
 
 def test_list_filters_by_status_and_category(client, auction):
@@ -192,5 +192,5 @@ def test_list_filters_by_status_and_category(client, auction):
     response = client.get("/auctions", params={"category": "art", "status": "active"})
     assert response.status_code == 200
     body = response.json()
-    assert body["total"] >= 1
-    assert all(item["category"] == "art" for item in body["items"])
+    assert body["pagination"]["totalData"] >= 1
+    assert all(item["category"] == "art" for item in body["data"])

@@ -99,7 +99,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('created', () => pm.response.to.have.status(201));",
-                  "pm.collectionVariables.set('sellerId', pm.response.json().id);"
+                  "pm.collectionVariables.set('sellerId', pm.response.json().data.id);"
                 ]
               }
             }
@@ -156,7 +156,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('created', () => pm.response.to.have.status(201));",
-                  "pm.collectionVariables.set('userId', pm.response.json().id);"
+                  "pm.collectionVariables.set('userId', pm.response.json().data.id);"
                 ]
               }
             }
@@ -200,7 +200,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const body = pm.response.json();",
+                  "const body = pm.response.json().data;",
                   "pm.collectionVariables.set('sellerToken', body.access_token);",
                   "pm.collectionVariables.set('refreshToken', body.refresh_token);",
                   "pm.test('tokens issued', () => pm.expect(body.access_token).to.be.a('string'));"
@@ -247,7 +247,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const body = pm.response.json();",
+                  "const body = pm.response.json().data;",
                   "pm.collectionVariables.set('accessToken', body.access_token);",
                   "pm.collectionVariables.set('refreshToken', body.refresh_token);",
                   "pm.test('tokens issued', () => pm.expect(body.access_token).to.be.a('string'));"
@@ -351,7 +351,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('ok', () => pm.response.to.have.status(200));",
-                  "pm.collectionVariables.set('bidder2Token', pm.response.json().access_token);"
+                  "pm.collectionVariables.set('bidder2Token', pm.response.json().data.access_token);"
                 ]
               }
             }
@@ -396,7 +396,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "if (pm.response.code === 200) {",
-                  "  pm.collectionVariables.set('adminToken', pm.response.json().access_token);",
+                  "  pm.collectionVariables.set('adminToken', pm.response.json().data.access_token);",
                   "} else {",
                   "  console.warn('Admin login failed - run scripts/create_admin.py first.');",
                   "}"
@@ -443,7 +443,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const body = pm.response.json();",
+                  "const body = pm.response.json().data;",
                   "pm.collectionVariables.set('accessToken', body.access_token);",
                   "pm.collectionVariables.set('refreshToken', body.refresh_token);",
                   "pm.test('tokens issued', () => pm.expect(body.access_token).to.be.a('string'));"
@@ -619,7 +619,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const body = pm.response.json();",
+                  "const body = pm.response.json().data;",
                   "pm.collectionVariables.set('auctionId', body.id);",
                   "pm.collectionVariables.set('sellerId', body.seller.id);",
                   "pm.test('created', () => pm.response.to.have.status(201));",
@@ -692,13 +692,14 @@
                 "exec": [
                   "const body = pm.response.json();",
                   "pm.test('page shape', () => {",
-                  "  pm.expect(body).to.have.property('items');",
-                  "  pm.expect(body).to.have.property('total');",
+                  "  pm.expect(body).to.have.property('data');",
+                  "  pm.expect(body).to.have.property('pagination');",
+                  "  pm.expect(body.pagination).to.have.property('totalData');",
                   "});",
                   "// Do not clobber auctionId - it is captured by 'Create auction'.",
                   "pm.test('created auction is listed for its seller', () => {",
                   "  const id = pm.collectionVariables.get('auctionId');",
-                  "  pm.expect(body.items.map((a) => a.id)).to.include(id);",
+                  "  pm.expect(body.data.map((a) => a.id)).to.include(id);",
                   "});"
                 ]
               }
@@ -735,7 +736,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('has min_next_bid', () => pm.expect(pm.response.json()).to.have.property('min_next_bid'));"
+                  "pm.test('has min_next_bid', () => pm.expect(pm.response.json().data).to.have.property('min_next_bid'));"
                 ]
               }
             }
@@ -944,7 +945,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const body = pm.response.json();",
+                  "const body = pm.response.json().data;",
                   "pm.collectionVariables.set('bidId', body.bid.id);",
                   "pm.test('accepted', () => pm.response.to.have.status(201));",
                   "pm.test('price updated', () => pm.expect(body.current_price).to.eql('110.00'));"
@@ -1053,7 +1054,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('array', () => pm.expect(pm.response.json()).to.be.an('array'));"
+                  "pm.test('array', () => pm.expect(pm.response.json().data).to.be.an('array'));"
                 ]
               }
             }
@@ -1111,7 +1112,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const body = pm.response.json();",
+                  "const body = pm.response.json().data;",
                   "if (body.length) pm.collectionVariables.set('notificationId', body[0].id);",
                   "pm.test('array', () => pm.expect(body).to.be.an('array'));"
                 ]
@@ -1153,7 +1154,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('has unread', () => pm.expect(pm.response.json()).to.have.property('unread'));"
+                  "pm.test('has unread', () => pm.expect(pm.response.json().data).to.have.property('unread'));"
                 ]
               }
             }
@@ -1259,7 +1260,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "const body = pm.response.json();",
+                  "const body = pm.response.json().data;",
                   "const mine = pm.collectionVariables.get('userId');",
                   "const other = body.find((u) => u.id !== mine);",
                   "if (other) pm.collectionVariables.set('targetUserId', other.id);"
@@ -1399,7 +1400,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('shape', () => {",
-                  "  const b = pm.response.json();",
+                  "  const b = pm.response.json().data;",
                   "  ['users', 'auctions', 'bids', 'active_auctions'].forEach((k) => pm.expect(b).to.have.property(k));",
                   "});"
                 ]
@@ -1454,7 +1455,7 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('ended', () => pm.expect(pm.response.json().status).to.eql('ended'));"
+                  "pm.test('ended', () => pm.expect(pm.response.json().data.status).to.eql('ended'));"
                 ]
               }
             }

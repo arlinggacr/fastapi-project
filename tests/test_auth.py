@@ -12,8 +12,8 @@ def test_register_login_and_me(client, make_user):
     user = make_user()
     response = client.get("/users/me", headers=user["headers"])
     assert response.status_code == 200
-    assert response.json()["username"] == user["username"]
-    assert response.json()["role"] == "user"
+    assert response.json()["data"]["username"] == user["username"]
+    assert response.json()["data"]["role"] == "user"
 
 
 def test_duplicate_email_rejected(client, make_user):
@@ -27,7 +27,7 @@ def test_duplicate_email_rejected(client, make_user):
         },
     )
     assert response.status_code == 409
-    assert response.json()["detail"]["code"] == "EMAIL_TAKEN"
+    assert response.json()["error"]["code"] == "EMAIL_TAKEN"
 
 
 def test_wrong_password_rejected(client, make_user):
@@ -40,7 +40,7 @@ def test_refresh_issues_new_access_token(client, make_user):
     user = make_user()
     response = client.post("/auth/refresh", json={"refresh_token": user["refresh"]})
     assert response.status_code == 200
-    new_access = response.json()["access_token"]
+    new_access = response.json()["data"]["access_token"]
     assert (
         client.get("/users/me", headers={"Authorization": f"Bearer {new_access}"}).status_code
         == 200

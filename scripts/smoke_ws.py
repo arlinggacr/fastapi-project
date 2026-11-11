@@ -38,7 +38,7 @@ with TestClient(app) as client:
         r = client.post("/auth/register", json=body)
         ok(f"register {role}", r.status_code == 201, r.text[:100])
         r = client.post("/auth/login", json={"email": body["email"], "password": body["password"]})
-        tokens[role] = r.json()["access_token"]
+        tokens[role] = r.json()["data"]["access_token"]
 
     now = utcnow()
     r = client.post(
@@ -54,7 +54,7 @@ with TestClient(app) as client:
         headers={"Authorization": f"Bearer {tokens['seller']}"},
     )
     ok("create auction", r.status_code == 201, r.text[:120])
-    aid = r.json()["id"]
+    aid = r.json()["data"]["id"]
 
     # --- anonymous spectator: snapshot works ---
     with client.websocket_connect(f"/ws/auctions/{aid}") as ws:
@@ -100,7 +100,7 @@ with TestClient(app) as client:
     # --- /ws/me receives the outbid notification ---
     seller_id = client.get(
         "/users/me", headers={"Authorization": f"Bearer {tokens['seller']}"}
-    ).json()["id"]
+    ).json()["data"]["id"]
     ok("seller id present", bool(seller_id))
 
 print("\nAll websocket checks passed.")

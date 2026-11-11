@@ -38,7 +38,7 @@ def test_script_tags_are_stripped_from_title(client, make_user):
         headers=seller["headers"],
     )
     assert response.status_code == 201
-    title = response.json()["title"]
+    title = response.json()["data"]["title"]
     assert "<script" not in title.lower()
     assert title == "alert(1)Vintage watch"
 
@@ -57,7 +57,7 @@ def test_event_handler_markup_is_removed(client, make_user):
         headers=seller["headers"],
     )
     assert response.status_code == 201
-    description = response.json()["description"]
+    description = response.json()["data"]["description"]
     assert "<img" not in description.lower()
     assert "onerror" not in description.lower()
     assert "Brass lamp" in description
@@ -76,7 +76,7 @@ def test_javascript_image_url_rejected(client, make_user):
         },
         headers=seller["headers"],
     )
-    assert response.status_code == 422
+    assert response.status_code == 400
 
 
 def test_data_uri_image_rejected(client, make_user):
@@ -92,7 +92,7 @@ def test_data_uri_image_rejected(client, make_user):
         },
         headers=seller["headers"],
     )
-    assert response.status_code == 422
+    assert response.status_code == 400
 
 
 def test_username_rejects_markup(client):
@@ -104,7 +104,7 @@ def test_username_rejects_markup(client):
             "password": "Passw0rd!123",
         },
     )
-    assert response.status_code == 422
+    assert response.status_code == 400
 
 
 def test_control_characters_are_stripped(client, make_user):
@@ -120,7 +120,7 @@ def test_control_characters_are_stripped(client, make_user):
         headers=seller["headers"],
     )
     assert response.status_code == 201
-    assert "\x00" not in response.json()["title"]
+    assert "\x00" not in response.json()["data"]["title"]
 
 
 # --------------------------------------------------------------------------- #
@@ -141,7 +141,7 @@ def test_search_terms_are_treated_as_data(client, auction, payload):
     assert response.status_code == 200
     body = response.json()
     # Nothing matches, and crucially the tables still exist afterwards.
-    assert body["total"] == 0
+    assert body["pagination"]["totalData"] == 0
     assert client.get("/auctions").status_code == 200
 
 
@@ -153,7 +153,7 @@ def test_like_wildcards_are_escaped(client, auction):
 
     response = client.get("/auctions", params={"q": f"100% wool {token}"})
     assert response.status_code == 200
-    titles = [item["title"] for item in response.json()["items"]]
+    titles = [item["title"] for item in response.json()["data"]]
     assert titles == [f"100% wool {token}"]
 
 
@@ -197,7 +197,7 @@ def test_invalid_content_length_rejected(client):
 
 def test_error_responses_do_not_leak_internals(client):
     response = client.get("/auctions/not-a-uuid")
-    assert response.status_code == 422
+    assert response.status_code == 400
     body = response.text.lower()
     assert "traceback" not in body
     assert "psycopg" not in body

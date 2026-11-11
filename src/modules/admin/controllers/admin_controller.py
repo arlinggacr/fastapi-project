@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
@@ -22,6 +23,7 @@ from src.modules.users.dtos.user_response import UserResponse
 from src.modules.users.entities.user import User
 from src.modules.users.services.user_service import UserService
 from src.utils.deps import get_broker, get_gateway, require_admin
+from src.utils.responses import PageHandler, SuccessEnvelope, success
 
 router = APIRouter(
     prefix="/admin",
@@ -30,43 +32,56 @@ router = APIRouter(
 )
 
 
-@router.get("/users", response_model=list[UserResponse])
+@router.get("/users", response_model=SuccessEnvelope[list[UserResponse]])
 async def list_users(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=200),
     session: AsyncSession = Depends(get_session),
-) -> list[User]:
-    return await UserService(session).list(page=page, page_size=page_size)
+) -> dict[str, Any]:
+    service = UserService(session)
+    users = await service.list(page=page, page_size=page_size)
+    total = await service.count()
+    return success(
+        users,
+        "Users retrieved",
+        PageHandler.build(total_data=total, page=page, page_size=page_size),
+    )
 
 
-@router.patch("/users/{user_id}/role", response_model=UserResponse)
+@router.patch("/users/{user_id}/role", response_model=SuccessEnvelope[UserResponse])
 async def set_role(
     user_id: UUID,
     payload: UserUpdateRoleDTO,
     admin: User = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
-) -> User:
-    return await UserService(session).set_role(actor=admin, user_id=user_id, role=payload.role)
+) -> dict[str, Any]:
+    user = await UserService(session).set_role(
+        actor=admin, user_id=user_id, role=payload.role
+    )
+    return success(user, "User role updated")
 
 
-@router.patch("/users/{user_id}/active", response_model=UserResponse)
+@router.patch("/users/{user_id}/active", response_model=SuccessEnvelope[UserResponse])
 async def set_active(
     user_id: UUID,
     is_active: bool,
     admin: User = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
-) -> User:
-    return await UserService(session).set_active(actor=admin, user_id=user_id, is_active=is_active)
+) -> dict[str, Any]:
+    user = await UserService(session).set_active(
+        actor=admin, user_id=user_id, is_active=is_active
+    )
+    return success(user, "User activation updated")
 
 
-@router.post("/auctions/{auction_id}/end", response_model=AuctionResponse)
+@router.post("/auctions/{auction_id}/end", response_model=SuccessEnvelope[AuctionResponse])
 async def force_end(
     auction_id: UUID,
     admin: User = Depends(require_admin),
     session: AsyncSession = Depends(get_session),
     gateway: Gateway = Depends(get_gateway),
     broker: Broker = Depends(get_broker),
-) -> AuctionResponse:
+) -> dict[str, Any]:
     repo = AuctionRepository(session)
     auction = await repo.get_by_id(auction_id)
     if auction is None:
@@ -78,20 +93,26 @@ async def force_end(
     refreshed = await repo.get_by_id(auction_id)
     if refreshed is None:  # pragma: no cover - defensive
         raise not_found("Auction")
-    return await AuctionService(session, gateway, broker).to_response(refreshed, viewer=admin)
+    response = await AuctionService(session, gateway, broker).to_response(
+        refreshed, viewer=admin
+    )
+    return success(response, "Auction ended")
 
 
-@router.get("/stats")
-async def stats(session: AsyncSession = Depends(get_session)) -> dict[str, int]:
+@router.get("/stats", response_model=SuccessEnvelope[dict[str, int]])
+async def stats(session: AsyncSession = Depends(get_session)) -> dict[str, Any]:
     users = UserService(session)
     auctions = AuctionRepository(session)
     bids = BidRepository(session)
-    return {
-        "users": await users.count(),
-        "auctions": await auctions.count_all(),
-        "bids": await bids.count_all(),
-        "active_auctions": await auctions.count_by_status(AuctionStatus.active),
-    }
+    return success(
+        {
+            "users": await users.count(),
+            "auctions": await auctions.count_all(),
+            "bids": await bids.count_all(),
+            "active_auctions": await auctions.count_by_status(AuctionStatus.active),
+        },
+        "Platform statistics",
+    )
 
 
 __all__ = ["router", "status"]

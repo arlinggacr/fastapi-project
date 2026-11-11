@@ -50,7 +50,8 @@ src/
     ├── deps.py                 FastAPI dependencies (auth, gateway, broker)
     ├── rate_limit.py           Redis fixed-window limiter
     ├── sanitize.py             XSS / URL / LIKE hardening
-    └── security.py             hashing + JWT
+    ├── security.py             hashing + JWT
+    └── responses/              response envelope (success/error + models)
 ```
 
 Each module follows **controller → service → repository**:
@@ -91,6 +92,38 @@ See `.env.example`. Notable keys:
 * `JWT_SECRET` – generate with `python -c "import secrets;print(secrets.token_urlsafe(48))"`.
 
 ## API
+
+Every JSON response uses one of two envelopes, produced by
+`src/utils/responses`:
+
+```jsonc
+// success
+{
+  "status": true,
+  "data": { },                  // payload (object, array or null)
+  "message": "Auction created",
+  "pagination": {               // null for non-paginated endpoints
+    "totalData": 42,
+    "totalPage": 3,
+    "page": 2
+  }
+}
+
+// error
+{
+  "status": false,
+  "message": "You cannot bid on your own auction",
+  "error": { "code": "SELLER_CANNOT_BID" }
+}
+```
+
+`error` carries the stable machine-readable code and any extra fields (for
+example `min_next_bid` on `BID_TOO_LOW`). Validation failures return **400**
+with `message: "Validation failed"` and `error` as a list of messages.
+
+The five endpoints marked `204` (`change password`, `delete auction`,
+`watch`, `unwatch`, `mark notification read`) return no body at all, because
+HTTP forbids one on 204.
 
 ### Auth
 | Method | Path | Notes |
